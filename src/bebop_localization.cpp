@@ -13,6 +13,7 @@
 #include <ctime>   // For time functions
 #include <iomanip> // For std::put_time
 #include <boost/filesystem.hpp> // For filesystem operations
+#include "../ROSUtilities/csv_logger.h"
 
 class bebop_localization
 {
