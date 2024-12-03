@@ -35,9 +35,14 @@ public:
     Eigen::VectorXd z_;
     Eigen::VectorXd x_;
     Eigen::VectorXd x_odom_;
-    std::ofstream csv_file_filtered_pose_;
-    std::ofstream csv_file_odometry_;
-    std::ofstream csv_file_ground_truth_;
+    std::unique_ptr<CSVLogger> csv_logger_filtered_pose_;
+    std::unique_ptr<CSVLogger> csv_logger_odometry_;
+    std::unique_ptr<CSVLogger> csv_logger_ground_truth_;
+    std::ostringstream timestamp;
+    std::string odom_topic = "bebop2/odometry_sensor1/odometry";
+    std::string natnet_topic = "bebop2/ground_truth/odometry";
+    std::string filtered_pose_topic = "/filtered_pose";
+    
 
     bebop_localization(ros::NodeHandle& nh)
     {
@@ -57,63 +62,47 @@ public:
         x_pred_ = Eigen::VectorXd::Zero(12);
         x_odom_ = Eigen::VectorXd::Zero(12);
         z_ = Eigen::VectorXd::Zero(6);
+        // Initialize loggers
+        std::vector<std::string> header = std::vector<std::string>{"timestamp", 
+                                                                    "topic", 
+                                                                    "x", 
+                                                                    "dx", 
+                                                                    "theta", 
+                                                                    "dtheta", 
+                                                                    "y", 
+                                                                    "dy", 
+                                                                    "roll_angle", 
+                                                                    "droll", 
+                                                                    "z", 
+                                                                    "dz", 
+                                                                    "yaw_angle", 
+                                                                    "dyaw",
+                                                                    "qx",
+                                                                    "qy",
+                                                                    "qz",
+                                                                    "qw"};
+        csv_logger_filtered_pose_ = std::make_unique<CSVLogger>("mybebop_ws", "bebop_localization", "filtered_pose", header);
+        csv_logger_odometry_ = std::make_unique<CSVLogger>("mybebop_ws", "bebop_localization", "odometry", header);
+        csv_logger_ground_truth_ = std::make_unique<CSVLogger>("mybebop_ws", "bebop_localization", "ground_truth", header);
+
         // Initialize parameters
         initializeParameters(nh);
 
         // Initialize publishers
         // joy_pub_ = nh.advertise<sensor_msgs::Joy>("joy", 10);
-        filtered_pose_pub_ = nh.advertise<nav_msgs::Odometry>("/filtered_pose", 10);
+        filtered_pose_pub_ = nh.advertise<nav_msgs::Odometry>(filtered_pose_topic, 10);
 
 
         // Initialize subscribers
-        odom_sub = nh.subscribe("bebop2/odometry_sensor1/odometry", 10, &bebop_localization::odomCallback, this);
-        natnet_sub = nh.subscribe("bebop2/ground_truth/odometry", 10, &bebop_localization::natnetCallback, this);
+        odom_sub = nh.subscribe(odom_topic, 10, &bebop_localization::odomCallback, this);
+        natnet_sub = nh.subscribe(natnet_topic, 10, &bebop_localization::natnetCallback, this);
         
         // Get current time
         std::time_t now = std::time(nullptr);
-        std::tm* now_tm = std::localtime(&now);
-        std::ostringstream timestamp;
+        std::tm* now_tm = std::localtime(&now);        
         timestamp << std::put_time(now_tm, "%Y%m%d_%H%M%S");
 
-        // Construct the absolute path for the CSV files with timestamp
-        const char* home_dir = getenv("HOME");
-        const char* workspace_dir = "mybebop_ws"; // Get the ROS workspace directory
-        ROS_INFO("Home directory: %s", home_dir);
-        ROS_INFO("Workspace directory: %s", workspace_dir);
-        std::string csv_path_ground_truth, csv_path_filtered_pose, csv_path_odometry;
-        if (home_dir != nullptr)
-        {
-            std::string base_path = std::string(home_dir) + "/" + std::string(workspace_dir) + "/csvLogs/bebop_localization/" + timestamp.str();
-            csv_path_ground_truth = base_path + "/ground_truth.csv";
-            csv_path_filtered_pose = base_path + "/filtered_pose.csv";
-            csv_path_odometry = base_path + "/odometry.csv";
-            ROS_INFO("CSV files will be saved in %s", csv_path_ground_truth.c_str());
 
-            // Create directories if they do not exist
-            boost::filesystem::create_directories(base_path);
-        }
-        else
-        {
-            ROS_ERROR("Failed to get HOME environment variable");
-            csv_path_ground_truth = "ground_truth_" + timestamp.str() + ".csv"; // Fallback to current directory
-            csv_path_filtered_pose = "filtered_pose_" + timestamp.str() + ".csv"; // Fallback to current directory
-            csv_path_odometry = "odometry_" + timestamp.str() + ".csv"; // Fallback to current directory
-        }
-
-        // Open CSV files
-        csv_file_ground_truth_.open(csv_path_ground_truth);
-        csv_file_filtered_pose_.open(csv_path_filtered_pose);
-        csv_file_odometry_.open(csv_path_odometry);
-        if (!csv_file_ground_truth_.is_open() || !csv_file_filtered_pose_.is_open() || !csv_file_odometry_.is_open())
-        {
-            ROS_ERROR("Failed to open CSV files");
-        }
-        else
-        {
-            csv_file_ground_truth_ << "timestamp,topic,x,dx,theta,dtheta,y,dy,roll_angle,droll,z,dz,yaw_angle,dyaw\n";
-            csv_file_filtered_pose_ << "timestamp,topic,x,dx,theta,dtheta,y,dy,roll_angle,droll,z,dz,yaw_angle,dyaw\n";
-            csv_file_odometry_ << "timestamp,topic,x,dx,theta,dtheta,y,dy,roll_angle,droll,z,dz,yaw_angle,dyaw\n";
-        }
         // Initialize services
         // service_ = nh.advertiseService("service_name", &bebop_localization::serviceCallback, this);
 
@@ -122,18 +111,6 @@ public:
     }
         ~bebop_localization()
     {
-        if (csv_file_ground_truth_.is_open())
-        {
-            csv_file_ground_truth_.close();
-        }
-        if (csv_file_filtered_pose_.is_open())
-        {
-            csv_file_filtered_pose_.close();
-        }
-        if (csv_file_odometry_.is_open())
-        {
-            csv_file_odometry_.close();
-        }
     }
 
     void spin()
@@ -176,7 +153,26 @@ private:
         P_pred_ = F_ * P_ * F_.transpose() + Q_;
 
         updateKalmanFilter(z_, x_pred_,P_pred_);
-        writeCSV(csv_file_odometry_, "bebop2/odometry_sensor1/odometry", x, dx, theta, dtheta, y, dy, roll_angle, droll, z, dz, yaw_angle, dyaw);
+        
+        std::vector<std::variant<std::string, double>> data_odom = {std::to_string(ros::Time::now().toSec()), 
+                                                                odom_topic, 
+                                                                x, 
+                                                                dx, 
+                                                                theta, 
+                                                                dtheta, 
+                                                                y, 
+                                                                dy, 
+                                                                roll_angle, 
+                                                                droll, 
+                                                                z, 
+                                                                dz, 
+                                                                yaw_angle, 
+                                                                dyaw,
+                                                                quaternion.x(),
+                                                                quaternion.y(),
+                                                                quaternion.z(),
+                                                                quaternion.w()};
+        csv_logger_odometry_->writeCSV(data_odom);
     }
     // void natnetCallback(const geometry_msgs::PoseStamped::ConstPtr& msg)    
     void natnetCallback(const nav_msgs::Odometry::ConstPtr& msg)
@@ -194,7 +190,25 @@ private:
         z_(3) = roll;
         z_(4) = pitch;
         z_(5) = yaw;
-        writeCSV(csv_file_ground_truth_, "bebop2/ground_truth/odometry", pose.pose.pose.position.x, 0, pose.pose.pose.position.y, 0, pose.pose.pose.position.z, 0, roll, 0, pitch, 0, yaw, 0);
+        std::vector<std::variant<std::string, double>> data_ground_truth = {std::to_string(ros::Time::now().toSec()), 
+                                                                natnet_topic, 
+                                                                pose.pose.pose.position.x, 
+                                                                0.0, 
+                                                                pitch, 
+                                                                0.0,
+                                                                pose.pose.pose.position.y, 
+                                                                0.0,
+                                                                roll, 
+                                                                0.0, 
+                                                                pose.pose.pose.position.z, 
+                                                                0.0,   
+                                                                yaw, 
+                                                                0.0,
+                                                                quaternion.x(),
+                                                                quaternion.y(),
+                                                                quaternion.z(),
+                                                                quaternion.w()};
+        csv_logger_ground_truth_->writeCSV(data_ground_truth);
     }
 
     void updateKalmanFilter(Eigen::VectorXd z, Eigen::VectorXd x_pred, Eigen::MatrixXd P_pred)
@@ -207,14 +221,25 @@ private:
         filtered_pose.pose.pose.position.z = x_(8);
         filtered_pose.pose.pose.orientation = tf::createQuaternionMsgFromRollPitchYaw(x_(6), x_(2), x_(10));
         filtered_pose_pub_.publish(filtered_pose);
-        writeCSV(csv_file_filtered_pose_, "/filtered_pose", x_(0), x_(1), x_(2), x_(3), x_(4), x_(5), x_(6), x_(7), x_(8), x_(9), x_(10), x_(11));
-    }
-    void writeCSV(std::ofstream& csv_file, const std::string& topic, double x, double dx, double theta, double dtheta, double y, double dy, double roll_angle, double droll, double z, double dz, double yaw_angle, double dyaw)
-    {
-        if (csv_file.is_open())
-        {
-            csv_file << ros::Time::now() << "," << topic << "," << x << "," << dx << "," << theta << "," << dtheta << "," << y << "," << dy << "," << roll_angle << "," << droll << "," << z << "," << dz << "," << yaw_angle << "," << dyaw << "\n";
-        }
+        std::vector<std::variant<std::string, double>> data_filtered = {std::to_string(ros::Time::now().toSec()), 
+                                                                filtered_pose_topic, 
+                                                                x_(0), 
+                                                                x_(1), 
+                                                                x_(2), 
+                                                                x_(3), 
+                                                                x_(4), 
+                                                                x_(5), 
+                                                                x_(6), 
+                                                                x_(7), 
+                                                                x_(8), 
+                                                                x_(9), 
+                                                                x_(10), 
+                                                                x_(11),
+                                                                filtered_pose.pose.pose.orientation.x,
+                                                                filtered_pose.pose.pose.orientation.y,
+                                                                filtered_pose.pose.pose.orientation.z,
+                                                                filtered_pose.pose.pose.orientation.w};
+        csv_logger_filtered_pose_->writeCSV(data_filtered);
     }
 };
 
