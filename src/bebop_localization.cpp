@@ -63,6 +63,12 @@ public:
         x_odom_ = Eigen::VectorXd::Zero(12);
         z_ = Eigen::VectorXd::Zero(6);
         // Initialize loggers
+        const char* workspace_name = std::getenv("MY_WORKSPACE_NAME");
+        if (workspace_name == nullptr)
+        {
+            ROS_ERROR("Environment variable MY_WORKSPACE_NAME is not set.");
+            return;
+        }
         std::vector<std::string> header = std::vector<std::string>{"timestamp", 
                                                                     "topic", 
                                                                     "x", 
@@ -71,19 +77,19 @@ public:
                                                                     "dtheta", 
                                                                     "y", 
                                                                     "dy", 
-                                                                    "roll_angle", 
+                                                                    "roll", 
                                                                     "droll", 
                                                                     "z", 
                                                                     "dz", 
-                                                                    "yaw_angle", 
+                                                                    "yaw", 
                                                                     "dyaw",
                                                                     "qx",
                                                                     "qy",
                                                                     "qz",
                                                                     "qw"};
-        csv_logger_filtered_pose_ = std::make_unique<CSVLogger>("mybebop_ws", "bebop_localization", "filtered_pose", header);
-        csv_logger_odometry_ = std::make_unique<CSVLogger>("mybebop_ws", "bebop_localization", "odometry", header);
-        csv_logger_ground_truth_ = std::make_unique<CSVLogger>("mybebop_ws", "bebop_localization", "ground_truth", header);
+        csv_logger_filtered_pose_ = std::make_unique<CSVLogger>(workspace_name, "bebop_localization", "filtered_pose", header);
+        csv_logger_odometry_ = std::make_unique<CSVLogger>(workspace_name, "bebop_localization", "odometry", header);
+        csv_logger_ground_truth_ = std::make_unique<CSVLogger>(workspace_name, "bebop_localization", "ground_truth", header);
 
         // Initialize parameters
         initializeParameters(nh);
@@ -138,17 +144,17 @@ private:
         tf::Matrix3x3(quaternion).getRPY(roll, pitch, yaw);
         double x = odometry.pose.pose.position.x;
         double dx = odometry.twist.twist.linear.x;
-        double theta = pitch;
-        double dtheta = odometry.twist.twist.angular.y;
+        double pitch_ = pitch;
+        double dpitch = odometry.twist.twist.angular.y;
         double y = odometry.pose.pose.position.y;
         double dy = odometry.twist.twist.linear.y;
-        double roll_angle = roll;
+        double roll_ = roll;
         double droll = odometry.twist.twist.angular.x;
         double z = odometry.pose.pose.position.z;
         double dz = odometry.twist.twist.linear.z;
-        double yaw_angle = yaw;
+        double yaw_ = yaw;
         double dyaw = odometry.twist.twist.angular.z;
-        x_odom_ << x, dx, theta, dtheta, y, dy, roll_angle, droll, z, dz, yaw_angle, dyaw;
+        x_odom_ << x, dx, pitch_, dpitch, y, dy, roll_, droll, z, dz, yaw_, dyaw;
         x_pred_ = F_ * x_odom_;
         P_pred_ = F_ * P_ * F_.transpose() + Q_;
 
@@ -158,15 +164,15 @@ private:
                                                                 odom_topic, 
                                                                 x, 
                                                                 dx, 
-                                                                theta, 
-                                                                dtheta, 
+                                                                pitch_, 
+                                                                dpitch, 
                                                                 y, 
                                                                 dy, 
-                                                                roll_angle, 
+                                                                roll_, 
                                                                 droll, 
                                                                 z, 
                                                                 dz, 
-                                                                yaw_angle, 
+                                                                yaw_, 
                                                                 dyaw,
                                                                 quaternion.x(),
                                                                 quaternion.y(),
