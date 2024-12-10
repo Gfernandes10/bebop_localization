@@ -21,7 +21,8 @@ public:
     // Class members
     geometry_msgs::Quaternion quat;
     // geometry_msgs::PoseStamped pose;
-    nav_msgs::Odometry odometry, filtered_pose, pose;
+    nav_msgs::Odometry odometry, filtered_pose;
+    geometry_msgs::PoseStamped pose;
     ros::Publisher filtered_pose_pub_;
     ros::Subscriber odom_sub;
     ros::Subscriber natnet_sub;
@@ -40,7 +41,7 @@ public:
     std::unique_ptr<CSVLogger> csv_logger_ground_truth_;
     std::ostringstream timestamp;
     std::string odom_topic = "bebop2/odometry_sensor1/odometry";
-    std::string natnet_topic = "bebop2/ground_truth/odometry";
+    std::string natnet_topic = "/natnet_ros/Bebop1/pose";
     std::string filtered_pose_topic = "/filtered_pose";
     
 
@@ -181,32 +182,33 @@ private:
         csv_logger_odometry_->writeCSV(data_odom);
     }
     // void natnetCallback(const geometry_msgs::PoseStamped::ConstPtr& msg)    
-    void natnetCallback(const nav_msgs::Odometry::ConstPtr& msg)
+    void natnetCallback(const geometry_msgs::PoseStamped::ConstPtr& msg)
     {
         ROS_INFO("Received Pose message");
         // // Process Pose messages here
         pose = *msg;
         tf::Quaternion quaternion;
-        tf::quaternionMsgToTF(pose.pose.pose.orientation, quaternion);
+        
+        tf::quaternionMsgToTF(pose.pose.orientation, quaternion);
         double roll, pitch, yaw;
         tf::Matrix3x3(quaternion).getRPY(roll, pitch, yaw);
-        z_(0) = pose.pose.pose.position.x;
-        z_(1) = pose.pose.pose.position.y;
-        z_(2) = pose.pose.pose.position.z;
+        z_(0) = pose.pose.position.x;
+        z_(1) = pose.pose.position.y;
+        z_(2) = pose.pose.position.z;
         z_(3) = roll;
         z_(4) = pitch;
         z_(5) = yaw;
         std::vector<std::variant<std::string, double>> data_ground_truth = {std::to_string(ros::Time::now().toSec()), 
                                                                 natnet_topic, 
-                                                                pose.pose.pose.position.x, 
+                                                                pose.pose.position.x, 
                                                                 0.0, 
                                                                 pitch, 
                                                                 0.0,
-                                                                pose.pose.pose.position.y, 
+                                                                pose.pose.position.y, 
                                                                 0.0,
                                                                 roll, 
                                                                 0.0, 
-                                                                pose.pose.pose.position.z, 
+                                                                pose.pose.position.z, 
                                                                 0.0,   
                                                                 yaw, 
                                                                 0.0,

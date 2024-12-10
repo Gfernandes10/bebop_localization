@@ -118,8 +118,6 @@ catkin_package(
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
-message(STATUS "CMAKE_CURRENT_SOURCE_DIR: ${CMAKE_CURRENT_SOURCE_DIR}")
-message(STATUS "Including directory: ${CMAKE_CURRENT_SOURCE_DIR}/../ROSUtilities")
 
 include_directories(
 # include
@@ -142,6 +140,7 @@ include_directories(
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 add_executable(${PROJECT_NAME}_node src/bebop_localization.cpp)
+add_executable(odometry_to_pose_node src/odometry_to_pose.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -152,9 +151,14 @@ add_executable(${PROJECT_NAME}_node src/bebop_localization.cpp)
 ## Add cmake target dependencies of the executable
 ## same as for the library above
 add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(odometry_to_pose_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
 target_link_libraries(${PROJECT_NAME}_node
+  ${catkin_LIBRARIES}
+  Eigen3::Eigen
+)
+target_link_libraries(odometry_to_pose_node
   ${catkin_LIBRARIES}
   Eigen3::Eigen
 )
