@@ -318,12 +318,10 @@ private:
     void timerCallback(const ros::TimerEvent&)
     {
         // Chama a função para realizar o filtro de Kalman e publicar a pose
-        ROS_INFO("Calling timer callback");
         applyKalmanFilterAndPublish();
     }
     void applyKalmanFilterAndPublish()
     {
-        ROS_INFO("Applying Estimated Kalman Filter");
         // Predição do estado
         Eigen::VectorXd x_pred_est = F_est * x_est;
         Eigen::MatrixXd P_pred_est = F_est * P_est* F_est.transpose() + Q_est;
