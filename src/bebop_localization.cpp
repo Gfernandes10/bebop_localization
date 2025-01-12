@@ -78,8 +78,8 @@ public:
         x_ = Eigen::VectorXd::Zero(12);
 
         //Estimated Kalman Filter Parameters
-        double Ts = 0.05;
-        double sigma_a = 0.1;
+        double Ts = 0.01; //0.05
+        double sigma_a = 30.0;
         initializeEstimatedKalmanParameters(Ts, sigma_a);
 
         // Initialize loggers
@@ -188,7 +188,7 @@ private:
     }
     void odomCallback(const nav_msgs::Odometry::ConstPtr& msg)
     {
-        ROS_INFO("Received Odometry message");
+        
         // Process Odometry messages here
         odometry = *msg;
         tf::Quaternion quaternion;      
@@ -235,7 +235,7 @@ private:
     // void natnetCallback(const geometry_msgs::PoseStamped::ConstPtr& msg)    
     void natnetCallback(const geometry_msgs::PoseStamped::ConstPtr& msg)
     {
-        ROS_INFO("Received Pose message");
+        // ROS_INFO("Received Pose message");
         // // Process Pose messages here
         pose = *msg;
         tf::Quaternion quaternion;
@@ -276,7 +276,7 @@ private:
         csv_logger_ground_truth_->writeCSV(data_ground_truth);
 
 
-
+        
     }
 
     void updateKalmanFilter(Eigen::VectorXd z, Eigen::VectorXd x_pred, Eigen::MatrixXd P_pred)
@@ -330,21 +330,20 @@ private:
         Eigen::MatrixXd K = P_pred_est * H_est.transpose() * (H_est * P_pred_est * H_est.transpose() + R_est).inverse();
         x_est = x_pred_est + K * (z_ - H_est * x_pred_est);
         P_est = (Eigen::MatrixXd::Identity(12, 12) - K * H_est) * P_pred_est;
-
+        
         // Estimação das velocidades
-        double x = x_(0);
-        double dx = x_(1);
-        double pitch = x_(2);
-        double dpitch = x_(3);
-        double y = x_(4);
-        double dy = x_(5);
-        double roll = x_(6);
-        double droll = x_(7);
-        double z = x_(8);
-        double dz = x_(9);
-        double yaw = x_(10);
-        double dyaw = x_(11);
-
+        double x = x_est(0);
+        double dx = x_est(1);
+        double pitch = x_est(2);
+        double dpitch = x_est(3);
+        double y = x_est(4);
+        double dy = x_est(5);
+        double roll = x_est(6);
+        double droll = x_est(7);
+        double z = x_est(8);
+        double dz = x_est(9);
+        double yaw = x_est(10);
+        double dyaw = x_est(11);
         // Publica a pose filtrada
         filtered_pose_est.pose.pose.position.x = x;
         filtered_pose_est.pose.pose.position.y = y;
